@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ระบบทะเบียนอุปกรณ์ไอที</title>
+<style>
+  body {
+    font-family: "Tahoma", "Segoe UI", sans-serif;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 20px;
+    background-color: #f5f5f5;
+    color: #222;
+  }
+
+  h1 {
+    text-align: center;
+    color: #2c3e50;
+  }
+
+  .form-section, .table-section {
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+    margin-bottom: 24px;
+  }
+
+  .form-row {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 12px;
+  }
+
+  label {
+    margin-bottom: 4px;
+    font-weight: bold;
+  }
+
+  input[type="text"], select {
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 14px;
+  }
+
+  button {
+    padding: 10px 20px;
+    background-color: #2c7be5;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  button:hover {
+    background-color: #1a5fc4;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  th, td {
+    padding: 10px;
+    border: 1px solid #ddd;
+    text-align: left;
+  }
+
+  th {
+    background-color: #2c3e50;
+    color: #fff;
+  }
+
+  tr:nth-child(even) {
+    background-color: #f9f9f9;
+  }
+
+  .empty-message {
+    text-align: center;
+    color: #888;
+    padding: 16px;
+  }
+</style>
+</head>
+<body>
+
+  <h1>ระบบทะเบียนอุปกรณ์ไอที</h1>
+
+  <div class="form-section">
+    <h2>เพิ่มอุปกรณ์ใหม่</h2>
+    <form id="deviceForm">
+      <div class="form-row">
+        <label for="deviceName">ชื่ออุปกรณ์</label>
+        <input type="text" id="deviceName" required>
+      </div>
+
+      <div class="form-row">
+        <label for="deviceType">ประเภท</label>
+        <select id="deviceType" required>
+          <option value="โน้ตบุ๊ก">โน้ตบุ๊ก</option>
+          <option value="จอ">จอ</option>
+          <option value="เครื่องพิมพ์">เครื่องพิมพ์</option>
+          <option value="สวิตช์">สวิตช์</option>
+          <option value="กล้องวงจรปิด">กล้องวงจรปิด</option>
+        </select>
+      </div>
+
+      <div class="form-row">
+        <label for="serialNumber">หมายเลขเครื่อง</label>
+        <input type="text" id="serialNumber" required>
+      </div>
+
+      <div class="form-row">
+        <label for="owner">ผู้ถือครอง</label>
+        <input type="text" id="owner" required>
+      </div>
+
+      <div class="form-row">
+        <label for="status">สถานะ</label>
+        <select id="status" required>
+          <option value="ใช้งาน">ใช้งาน</option>
+          <option value="ซ่อม">ซ่อม</option>
+          <option value="เลิกใช้">เลิกใช้</option>
+          <option value="สำรอง">สำรอง</option>
+        </select>
+      </div>
+
+      <button type="submit">บันทึกอุปกรณ์</button>
+    </form>
+  </div>
+
+  <div class="table-section">
+    <h2>รายการอุปกรณ์ทั้งหมด</h2>
+    <table id="deviceTable">
+      <thead>
+        <tr>
+          <th>ชื่ออุปกรณ์</th>
+          <th>ประเภท</th>
+          <th>หมายเลขเครื่อง</th>
+          <th>ผู้ถือครอง</th>
+          <th>สถานะ</th>
+        </tr>
+      </thead>
+      <tbody id="deviceTableBody">
+      </tbody>
+    </table>
+    <div id="emptyMessage" class="empty-message" style="display:none;">ยังไม่มีข้อมูลอุปกรณ์</div>
+  </div>
+
+<script>
+  // คีย์ที่ใช้เก็บข้อมูลอุปกรณ์ใน localStorage
+  const STORAGE_KEY = "itAssetDevices";
+
+  // โหลดรายการอุปกรณ์จาก localStorage
+  function loadDevices() {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+    try {
+      return JSON.parse(raw);
+    } catch (e) {
+      return [];
+    }
+  }
+
+  // บันทึกรายการอุปกรณ์ลง localStorage
+  function saveDevices(devices) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(devices));
+  }
+
+  // วาดตารางใหม่จากรายการอุปกรณ์ที่ส่งเข้ามา
+  function renderTable(devices) {
+    const tableBody = document.getElementById("deviceTableBody");
+    const emptyMessage = document.getElementById("emptyMessage");
+
+    tableBody.innerHTML = "";
+
+    if (devices.length === 0) {
+      emptyMessage.style.display = "block";
+      return;
+    }
+    emptyMessage.style.display = "none";
+
+    devices.forEach(function (device) {
+      const row = document.createElement("tr");
+
+      const nameCell = document.createElement("td");
+      nameCell.textContent = device.name;
+      row.appendChild(nameCell);
+
+      const typeCell = document.createElement("td");
+      typeCell.textContent = device.type;
+      row.appendChild(typeCell);
+
+      const serialCell = document.createElement("td");
+      serialCell.textContent = device.serialNumber;
+      row.appendChild(serialCell);
+
+      const ownerCell = document.createElement("td");
+      ownerCell.textContent = device.owner;
+      row.appendChild(ownerCell);
+
+      const statusCell = document.createElement("td");
+      statusCell.textContent = device.status;
+      row.appendChild(statusCell);
+
+      tableBody.appendChild(row);
+    });
+  }
+
+  // จัดการตอนกดบันทึกฟอร์ม
+  document.getElementById("deviceForm").addEventListener("submit", function (event) {
+    event.preventDefault();
+
+    const newDevice = {
+      id: Date.now(),
+      name: document.getElementById("deviceName").value.trim(),
+      type: document.getElementById("deviceType").value,
+      serialNumber: document.getElementById("serialNumber").value.trim(),
+      owner: document.getElementById("owner").value.trim(),
+      status: document.getElementById("status").value
+    };
+
+    const devices = loadDevices();
+    devices.push(newDevice);
+    saveDevices(devices);
+    renderTable(devices);
+
+    event.target.reset();
+  });
+
+  // โหลดข้อมูลเดิมมาแสดงตอนเปิดหน้าเว็บ
+  renderTable(loadDevices());
+</script>
+
+</body>
+</html>
