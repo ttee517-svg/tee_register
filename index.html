@@ -84,6 +84,64 @@
     color: #888;
     padding: 16px;
   }
+
+  .filter-section {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .filter-section input[type="text"],
+  .filter-section select {
+    flex: 1;
+    min-width: 160px;
+  }
+
+  .result-count {
+    color: #555;
+    font-size: 14px;
+    margin-bottom: 12px;
+  }
+
+  .action-cell {
+    display: flex;
+    gap: 6px;
+  }
+
+  .edit-btn, .delete-btn {
+    padding: 6px 12px;
+    font-size: 13px;
+    border: none;
+    border-radius: 4px;
+    color: #fff;
+    cursor: pointer;
+  }
+
+  .edit-btn {
+    background-color: #f0ad4e;
+  }
+
+  .edit-btn:hover {
+    background-color: #d99530;
+  }
+
+  .delete-btn {
+    background-color: #d9534f;
+  }
+
+  .delete-btn:hover {
+    background-color: #c9302c;
+  }
+
+  #cancelEditBtn {
+    background-color: #888;
+    margin-left: 8px;
+  }
+
+  #cancelEditBtn:hover {
+    background-color: #666;
+  }
 </style>
 </head>
 <body>
@@ -129,12 +187,37 @@
         </select>
       </div>
 
-      <button type="submit">บันทึกอุปกรณ์</button>
+      <button type="submit" id="submitBtn">บันทึกอุปกรณ์</button>
+      <button type="button" id="cancelEditBtn" style="display:none;">ยกเลิก</button>
     </form>
   </div>
 
   <div class="table-section">
     <h2>รายการอุปกรณ์ทั้งหมด</h2>
+
+    <div class="filter-section">
+      <input type="text" id="searchInput" placeholder="ค้นหาชื่ออุปกรณ์ หมายเลขเครื่อง หรือผู้ถือครอง">
+
+      <select id="filterType">
+        <option value="">ทุกประเภท</option>
+        <option value="โน้ตบุ๊ก">โน้ตบุ๊ก</option>
+        <option value="จอ">จอ</option>
+        <option value="เครื่องพิมพ์">เครื่องพิมพ์</option>
+        <option value="สวิตช์">สวิตช์</option>
+        <option value="กล้องวงจรปิด">กล้องวงจรปิด</option>
+      </select>
+
+      <select id="filterStatus">
+        <option value="">ทุกสถานะ</option>
+        <option value="ใช้งาน">ใช้งาน</option>
+        <option value="ซ่อม">ซ่อม</option>
+        <option value="เลิกใช้">เลิกใช้</option>
+        <option value="สำรอง">สำรอง</option>
+      </select>
+    </div>
+
+    <div id="resultCount" class="result-count"></div>
+
     <table id="deviceTable">
       <thead>
         <tr>
@@ -143,6 +226,7 @@
           <th>หมายเลขเครื่อง</th>
           <th>ผู้ถือครอง</th>
           <th>สถานะ</th>
+          <th>การจัดการ</th>
         </tr>
       </thead>
       <tbody id="deviceTableBody">
@@ -174,13 +258,17 @@
   }
 
   // วาดตารางใหม่จากรายการอุปกรณ์ที่ส่งเข้ามา
-  function renderTable(devices) {
+  // ถ้า hasNoMatch เป็น true แสดงว่ามีข้อมูลอยู่แต่ตัวกรอง/คำค้นหาไม่พบรายการที่ตรงกัน
+  function renderTable(devices, hasNoMatch) {
     const tableBody = document.getElementById("deviceTableBody");
     const emptyMessage = document.getElementById("emptyMessage");
 
     tableBody.innerHTML = "";
 
     if (devices.length === 0) {
+      emptyMessage.textContent = hasNoMatch
+        ? "ไม่พบข้อมูลที่ตรงกับการค้นหา"
+        : "ยังไม่มีข้อมูลอุปกรณ์";
       emptyMessage.style.display = "block";
       return;
     }
@@ -209,16 +297,138 @@
       statusCell.textContent = device.status;
       row.appendChild(statusCell);
 
+      const actionCell = document.createElement("td");
+      actionCell.className = "action-cell";
+
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "edit-btn";
+      editBtn.textContent = "แก้ไข";
+      editBtn.addEventListener("click", function () {
+        startEditDevice(device.id);
+      });
+      actionCell.appendChild(editBtn);
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "delete-btn";
+      deleteBtn.textContent = "ลบ";
+      deleteBtn.addEventListener("click", function () {
+        deleteDevice(device.id);
+      });
+      actionCell.appendChild(deleteBtn);
+
+      row.appendChild(actionCell);
+
       tableBody.appendChild(row);
     });
   }
+
+  // เก็บ id ของอุปกรณ์ที่กำลังแก้ไขอยู่ (null = ไม่ได้อยู่ในโหมดแก้ไข กำลังเพิ่มอุปกรณ์ใหม่)
+  let editingId = null;
+
+  // ลบอุปกรณ์ตาม id หลังจากยืนยันกับผู้ใช้แล้ว
+  function deleteDevice(id) {
+    const devices = loadDevices();
+    const target = devices.find(function (device) {
+      return device.id === id;
+    });
+    if (!target) {
+      return;
+    }
+
+    const confirmed = confirm("ต้องการลบอุปกรณ์ '" + target.name + "' หรือไม่?");
+    if (!confirmed) {
+      return;
+    }
+
+    const remainingDevices = devices.filter(function (device) {
+      return device.id !== id;
+    });
+    saveDevices(remainingDevices);
+
+    // ถ้ากำลังแก้ไขอุปกรณ์ตัวที่ถูกลบอยู่ ให้ยกเลิกโหมดแก้ไขด้วย
+    if (editingId === id) {
+      cancelEdit();
+    }
+
+    applyFilters();
+  }
+
+  // เติมข้อมูลอุปกรณ์ตาม id ลงในฟอร์ม แล้วสลับฟอร์มเป็นโหมดแก้ไข
+  function startEditDevice(id) {
+    const devices = loadDevices();
+    const target = devices.find(function (device) {
+      return device.id === id;
+    });
+    if (!target) {
+      return;
+    }
+
+    document.getElementById("deviceName").value = target.name;
+    document.getElementById("deviceType").value = target.type;
+    document.getElementById("serialNumber").value = target.serialNumber;
+    document.getElementById("owner").value = target.owner;
+    document.getElementById("status").value = target.status;
+
+    editingId = id;
+    document.getElementById("submitBtn").textContent = "บันทึกการแก้ไข";
+    document.getElementById("cancelEditBtn").style.display = "inline-block";
+  }
+
+  // ยกเลิกโหมดแก้ไข กลับไปเป็นฟอร์มเพิ่มอุปกรณ์ปกติ
+  function cancelEdit() {
+    editingId = null;
+    document.getElementById("deviceForm").reset();
+    document.getElementById("submitBtn").textContent = "บันทึกอุปกรณ์";
+    document.getElementById("cancelEditBtn").style.display = "none";
+  }
+
+  document.getElementById("cancelEditBtn").addEventListener("click", cancelEdit);
+
+  // กรองรายการอุปกรณ์ตามคำค้นหาและตัวเลือกที่เลือกไว้ แล้ววาดตารางใหม่
+  function applyFilters() {
+    const searchInput = document.getElementById("searchInput");
+    const filterType = document.getElementById("filterType");
+    const filterStatus = document.getElementById("filterStatus");
+    const resultCount = document.getElementById("resultCount");
+
+    const keyword = searchInput.value.trim().toLowerCase();
+    const selectedType = filterType.value;
+    const selectedStatus = filterStatus.value;
+
+    const allDevices = loadDevices();
+
+    const filteredDevices = allDevices.filter(function (device) {
+      const matchesKeyword =
+        keyword === "" ||
+        device.name.toLowerCase().includes(keyword) ||
+        device.serialNumber.toLowerCase().includes(keyword) ||
+        device.owner.toLowerCase().includes(keyword);
+
+      const matchesType = selectedType === "" || device.type === selectedType;
+      const matchesStatus = selectedStatus === "" || device.status === selectedStatus;
+
+      return matchesKeyword && matchesType && matchesStatus;
+    });
+
+    resultCount.textContent =
+      "พบ " + filteredDevices.length + " จาก " + allDevices.length + " รายการ";
+
+    const hasNoMatch = allDevices.length > 0 && filteredDevices.length === 0;
+    renderTable(filteredDevices, hasNoMatch);
+  }
+
+  // เมื่อพิมพ์ค้นหาหรือเปลี่ยนตัวเลือกกรอง ให้กรองตารางทันที
+  document.getElementById("searchInput").addEventListener("input", applyFilters);
+  document.getElementById("filterType").addEventListener("change", applyFilters);
+  document.getElementById("filterStatus").addEventListener("change", applyFilters);
 
   // จัดการตอนกดบันทึกฟอร์ม
   document.getElementById("deviceForm").addEventListener("submit", function (event) {
     event.preventDefault();
 
-    const newDevice = {
-      id: Date.now(),
+    const deviceData = {
       name: document.getElementById("deviceName").value.trim(),
       type: document.getElementById("deviceType").value,
       serialNumber: document.getElementById("serialNumber").value.trim(),
@@ -227,15 +437,30 @@
     };
 
     const devices = loadDevices();
-    devices.push(newDevice);
-    saveDevices(devices);
-    renderTable(devices);
 
-    event.target.reset();
+    if (editingId !== null) {
+      // โหมดแก้ไข: อัปเดตอุปกรณ์เดิมตาม editingId โดยคง id เดิมไว้
+      const targetIndex = devices.findIndex(function (device) {
+        return device.id === editingId;
+      });
+      if (targetIndex !== -1) {
+        devices[targetIndex] = Object.assign({ id: editingId }, deviceData);
+      }
+      saveDevices(devices);
+      cancelEdit();
+    } else {
+      // โหมดเพิ่มอุปกรณ์ใหม่ (พฤติกรรมเดิม)
+      const newDevice = Object.assign({ id: Date.now() }, deviceData);
+      devices.push(newDevice);
+      saveDevices(devices);
+      event.target.reset();
+    }
+
+    applyFilters();
   });
 
   // โหลดข้อมูลเดิมมาแสดงตอนเปิดหน้าเว็บ
-  renderTable(loadDevices());
+  applyFilters();
 </script>
 
 </body>
